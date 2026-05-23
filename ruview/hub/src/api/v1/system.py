@@ -1,6 +1,9 @@
 import time
 import platform
 import os
+import asyncio
+import numpy as np
+import logging
 from fastapi import APIRouter, Request, BackgroundTasks
 from pydantic import BaseModel
 
@@ -39,7 +42,7 @@ async def get_system_info(request: Request) -> SystemInfo:
 async def calibrate(request: Request, background_tasks: BackgroundTasks) -> dict:
     """
     Trigger a 10-second empty-room calibration.
-    Make sure the room is empty before calling this endpoint.
+    Make sure the room is completely empty before calling this.
     """
     background_tasks.add_task(_run_calibration, request.app)
     return {"status": "started", "duration_s": 10,
@@ -47,30 +50,44 @@ async def calibrate(request: Request, background_tasks: BackgroundTasks) -> dict
 
 
 async def _run_calibration(app) -> None:
-    import asyncio
-    import numpy as np
-    import logging
     log = logging.getLogger("calibrate")
 
-    state = app.state.system_state
-    model = app.state.model
-    cfg   = app.state.config
+    state    = app.state.system_state
+    model    = app.state.model
+    pipeline = app.state.pipeline
+    cfg      = app.state.config
 
     log.info("Calibration started — collecting 10s of empty-room CSI")
 
-    samples = []
-    for _ in range(cfg.pipeline.inference_rate_hz * 10):
+    csi_samples    = []
+    motion_samples = []
+    n_steps = cfg.pipeline.inference_rate_hz * 10
+
+    for _ in range(n_steps):
         window = await state.get_fused_window()
+        motion = await state.get_motion_window()
         if window is not None:
-            samples.append(window.mean(axis=0))
+            csi_samples.append(window.mean(axis=0))
+        if motion is not None:
+            motion_samples.append(float(motion.mean()))
         await asyncio.sleep(1.0 / cfg.pipeline.inference_rate_hz)
 
-    if samples:
-        baseline = np.mean(samples, axis=0)
-        model.set_baseline(baseline)
-        weights_path = os.path.join(
-            os.path.dirname(cfg.storage.db_path), "ruvector_weights.npz")
-        model.save_weights(weights_path)
-        log.info("Calibration complete. Baseline saved.")
-    else:
-        log.warning("Calibration failed — no CSI data available")
+    if not csi_samples:
+        log.warning("Calibration failed — no CSI data. Are all nodes connected?")
+        return
+
+    # Set CSI baseline on the model (for differential CSI)
+    baseline = np.mean(csi_samples, axis=0)
+    model.set_baseline(baseline)
+
+    # Set motion baseline on the pipeline (for motion-based presence)
+    if motion_samples and pipeline is not None:
+        baseline_motion = float(np.mean(motion_samples))
+        pipeline.set_baseline_motion(baseline_motion)
+        log.info("Motion baseline: %.3f", baseline_motion)
+
+    # Save weights so calibration persists across restarts
+    weights_path = os.path.join(
+        os.path.dirname(cfg.storage.db_path), "ruvector_weights.npz")
+    model.save_weights(weights_path)
+    log.info("Calibration complete. Baseline saved to %s", weights_path)
