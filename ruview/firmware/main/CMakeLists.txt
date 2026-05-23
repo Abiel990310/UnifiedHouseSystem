@@ -1,0 +1,20 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "csi_capture.c"
+        "feature_extract.c"
+        "mqtt_publish.c"
+        "ota.c"
+    INCLUDE_DIRS "."
+    REQUIRES
+        esp_wifi
+        esp_event
+        esp_netif
+        nvs_flash
+        mqtt
+        esp_http_client
+        esp_https_ota
+        json
+        freertos
+        log
+)

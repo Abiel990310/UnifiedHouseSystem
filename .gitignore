@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+.pytest_cache/
+.mypy_cache/
+
+# Environment
+.env
+*.env
+config.local.yaml
+
+# ESP-IDF
+ruview/firmware/build/
+ruview/firmware/sdkconfig
+ruview/firmware/managed_components/
+ruview/firmware/.cache/
+*.bin
+*.elf
+*.map
+
+# Database & data
+*.db
+*.sqlite
+data/
+logs/
+*.log
+
+# Models / weights
+*.tflite
+*.onnx
+*.h5
+*.pt
+weights/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Node (if any dashboard tooling added)
+node_modules/
+dist/

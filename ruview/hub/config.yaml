@@ -1,0 +1,59 @@
+# RuView Hub — configuration
+# Copy to config.local.yaml and edit; local file takes precedence.
+
+# API server
+api:
+  host: "0.0.0.0"
+  port: 8080
+  # Set to true in production (requires TLS termination in front)
+  secure: false
+
+# MQTT broker (Mosquitto runs on this Pi)
+mqtt:
+  host: "127.0.0.1"
+  port: 1883
+  client_id: "ruview_hub"
+  keepalive: 60
+
+# RuView sensor nodes
+nodes:
+  - id: "node_1"
+    location: "north_wall"     # Human-readable placement
+    weight: 1.0                # Fusion weight (adjust based on placement quality)
+  - id: "node_2"
+    location: "east_wall"
+    weight: 1.0
+  - id: "node_3"
+    location: "south_wall"
+    weight: 1.0
+
+# Inference pipeline
+pipeline:
+  # Number of CSI frames to buffer before running inference
+  window_size: 30              # frames  → 3 seconds at 10 Hz
+  inference_rate_hz: 10        # run inference this many times per second
+  presence_threshold: 0.55     # confidence above which person is declared present
+  max_persons: 3               # maximum number of persons to track
+
+# Room geometry (meters) — used for pose projection and visualization
+room:
+  width: 5.0
+  height: 3.0
+  depth: 4.0
+
+# Vitals detection
+vitals:
+  breathing_fft_window: 300    # frames (30 seconds) for breathing rate FFT
+  heart_fft_window: 600        # frames (60 seconds) for heart rate FFT
+  breathing_range_hz: [0.1, 0.5]   # 6–30 breaths/min
+  heart_range_hz: [0.8, 3.0]       # 48–180 bpm
+
+# Storage
+storage:
+  db_path: "/var/lib/ruview/ruview.db"
+  history_days: 7              # auto-purge records older than this
+
+# Logging
+logging:
+  level: "INFO"                # DEBUG | INFO | WARNING | ERROR
+  file: "/var/log/ruview/hub.log"
