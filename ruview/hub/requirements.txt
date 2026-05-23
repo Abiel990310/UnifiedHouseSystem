@@ -1,5 +1,8 @@
 # RuView Hub — Raspberry Pi Zero 2 W dependencies
-# Tested on Python 3.11 (Raspberry Pi OS Bookworm)
+#
+# numpy and scipy are intentionally excluded here — they are installed
+# via apt (python3-numpy, python3-scipy) and accessed through the
+# --system-site-packages venv to avoid compiling from source on the Pi.
 
 # API framework
 fastapi==0.115.5
@@ -7,10 +10,6 @@ uvicorn[standard]==0.32.1
 
 # MQTT
 aiomqtt==2.3.0
-
-# Signal processing (numpy is the only heavy dep — ships with Pi OS)
-numpy==1.26.4
-scipy==1.13.1
 
 # Configuration
 pyyaml==6.0.2

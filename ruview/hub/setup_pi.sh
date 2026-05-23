@@ -18,7 +18,7 @@ echo "Script dir: $SCRIPT_DIR"
 echo "[1/7] Installing system packages..."
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  python3 python3-pip python3-venv \
+  python3 python3-pip python3-venv python3-full \
   python3-numpy python3-scipy \
   mosquitto mosquitto-clients \
   git curl wget
@@ -44,7 +44,10 @@ chown -R "$RUVIEW_USER:$RUVIEW_USER" "$RUVIEW_DIR"
 
 # ── Python virtual environment ─────────────────────────────────────────────
 echo "[5/7] Setting up Python venv..."
-python3 -m venv "$RUVIEW_DIR/venv"
+# --system-site-packages lets the venv use apt-installed numpy/scipy
+# so we don't need to compile them from source (would take 45+ min on Pi Zero 2 W)
+rm -rf "$RUVIEW_DIR/venv"
+python3 -m venv --system-site-packages "$RUVIEW_DIR/venv"
 "$RUVIEW_DIR/venv/bin/pip" install --upgrade pip -q
 "$RUVIEW_DIR/venv/bin/pip" install -r "$RUVIEW_DIR/hub/requirements.txt" -q
 echo "  venv ready: $RUVIEW_DIR/venv"
