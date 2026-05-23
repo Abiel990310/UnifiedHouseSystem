@@ -1,0 +1,20 @@
+"""
+MQTT topic constants — must match firmware config.h exactly.
+"""
+
+
+class Topics:
+    # Subscriptions (hub listens)
+    NODE_CSI    = "ruview/node/+/csi"
+    NODE_STATUS = "ruview/node/+/status"
+
+    # Publications (hub publishes processed results)
+    PRESENCE = "ruview/system/presence"
+    POSE     = "ruview/system/pose"
+    VITALS   = "ruview/system/vitals"
+
+    @staticmethod
+    def node_id_from_topic(topic: str) -> str:
+        """Extract node ID from e.g. 'ruview/node/node_1/csi' → 'node_1'."""
+        parts = topic.split("/")
+        return parts[2] if len(parts) >= 3 else ""

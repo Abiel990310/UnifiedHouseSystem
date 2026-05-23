@@ -1,0 +1,27 @@
+# RuView Hub — Raspberry Pi Zero 2 W dependencies
+# Tested on Python 3.11 (Raspberry Pi OS Bookworm)
+
+# API framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# MQTT
+aiomqtt==2.3.0
+
+# Signal processing (numpy is the only heavy dep — ships with Pi OS)
+numpy==1.26.4
+scipy==1.13.1
+
+# Configuration
+pyyaml==6.0.2
+pydantic==2.9.2
+pydantic-settings==2.6.1
+
+# Storage
+aiosqlite==0.20.0
+
+# WebSocket support (included in uvicorn[standard] via websockets)
+websockets==13.1
+
+# Utilities
+python-multipart==0.0.12

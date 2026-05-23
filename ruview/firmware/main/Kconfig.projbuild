@@ -1,0 +1,53 @@
+menu "RuView Node Configuration"
+
+    config RUVIEW_NODE_ID
+        string "Node ID"
+        default "node_1"
+        help
+            Unique identifier for this sensor node (node_1, node_2, node_3).
+
+    config RUVIEW_WIFI_SSID
+        string "WiFi SSID"
+        default "蝦家"
+        help
+            SSID of the WiFi network to connect to.
+
+    config RUVIEW_WIFI_PASSWORD
+        string "WiFi Password"
+        default ""
+        help
+            Password for the WiFi network.
+
+    config RUVIEW_MQTT_BROKER_IP
+        string "MQTT Broker IP"
+        default "192.168.1.100"
+        help
+            IP address of the Raspberry Pi running the MQTT broker.
+
+    config RUVIEW_MQTT_BROKER_PORT
+        int "MQTT Broker Port"
+        default 1883
+        help
+            MQTT broker port (default 1883, or 8883 for TLS).
+
+    config RUVIEW_CSI_PUBLISH_RATE_HZ
+        int "CSI publish rate (Hz)"
+        default 10
+        range 1 20
+        help
+            How many CSI feature vectors to publish per second per node.
+
+    config RUVIEW_WIFI_CHANNEL
+        int "WiFi Channel to monitor"
+        default 0
+        range 0 13
+        help
+            Fixed WiFi channel for CSI capture. 0 = follow connected AP channel.
+
+    config RUVIEW_OTA_SERVER_URL
+        string "OTA firmware server URL"
+        default "http://192.168.1.100:8080/api/v1/ota/firmware.bin"
+        help
+            URL to check for OTA firmware updates.
+
+endmenu

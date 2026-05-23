@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RuView — WiFi CSI Tracker</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">&#9632;</span>
+        <span class="logo-text">RuView</span>
+        <span class="logo-sub">WiFi CSI Tracker</span>
+      </div>
+      <div class="header-status">
+        <span id="ws-badge" class="badge badge--offline">Offline</span>
+        <span id="inference-rate" class="stat-chip" title="Inference count"></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- ── Left panel: Presence + Vitals ────────────────────────── -->
+    <section class="panel panel--left">
+      <!-- Presence card -->
+      <div class="card" id="presence-card">
+        <div class="card-title">Presence</div>
+        <div class="presence-display">
+          <div id="presence-icon" class="presence-icon presence-icon--absent">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="32" cy="20" r="10" stroke="currentColor" stroke-width="3"/>
+              <path d="M10 58 C10 42 54 42 54 58" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="presence-info">
+            <div id="presence-label" class="presence-label">No one detected</div>
+            <div id="presence-conf" class="presence-conf">Confidence: --</div>
+            <div id="presence-zone" class="presence-zone"></div>
+          </div>
+        </div>
+        <div class="confidence-bar-wrap">
+          <div class="confidence-bar-bg">
+            <div id="confidence-bar" class="confidence-bar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vitals card -->
+      <div class="card" id="vitals-card">
+        <div class="card-title">Vitals</div>
+        <div class="vitals-grid">
+          <div class="vital-box">
+            <div class="vital-icon">&#9670;</div>
+            <div class="vital-value" id="breathing-rate">--</div>
+            <div class="vital-label">breaths/min</div>
+            <div class="vital-conf" id="breathing-conf">conf: --</div>
+          </div>
+          <div class="vital-box">
+            <div class="vital-icon">&#9829;</div>
+            <div class="vital-value" id="heart-rate">--</div>
+            <div class="vital-label">bpm</div>
+            <div class="vital-conf" id="heart-conf">conf: --</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node status card -->
+      <div class="card">
+        <div class="card-title">Sensor Nodes</div>
+        <div id="nodes-list" class="nodes-list">
+          <div class="node-row node-row--loading">Loading...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Center: Room map ──────────────────────────────────────── -->
+    <section class="panel panel--center">
+      <div class="card card--full">
+        <div class="card-title">
+          Room Map
+          <span class="card-title-sub" id="room-dims"></span>
+        </div>
+        <div class="room-map-container">
+          <canvas id="room-canvas"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Right panel: Motion + History ───────────────────────── -->
+    <section class="panel panel--right">
+      <!-- Motion energy chart -->
+      <div class="card">
+        <div class="card-title">Motion Energy</div>
+        <canvas id="motion-chart" height="100"></canvas>
+      </div>
+
+      <!-- Breathing waveform -->
+      <div class="card">
+        <div class="card-title">Breathing Signal</div>
+        <canvas id="breathing-chart" height="80"></canvas>
+      </div>
+
+      <!-- Inference stats -->
+      <div class="card">
+        <div class="card-title">System</div>
+        <div class="stats-grid">
+          <div class="stat"><span class="stat-label">Latency</span><span id="latency" class="stat-val">--</span></div>
+          <div class="stat"><span class="stat-label">Inferences</span><span id="inf-count" class="stat-val">--</span></div>
+          <div class="stat"><span class="stat-label">Uptime</span><span id="uptime" class="stat-val">--</span></div>
+          <div class="stat"><span class="stat-label">Calibrated</span><span id="calibrated" class="stat-val">--</span></div>
+        </div>
+        <button class="btn btn--calibrate" id="calibrate-btn">Calibrate Room</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/ws.js"></script>
+  <script src="/static/js/room_map.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
