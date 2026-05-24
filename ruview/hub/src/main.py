@@ -21,6 +21,7 @@ import time
 
 from contextlib import asynccontextmanager
 
+import numpy as np
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -75,6 +76,19 @@ async def lifespan(app: FastAPI):
     # Inference pipeline
     pipeline = InferencePipeline(cfg, state, model)
     await pipeline.start()
+
+    # Restore calibration baseline if saved
+    calib_path = os.path.join(os.path.dirname(cfg.storage.db_path), "calibration.npz")
+    if os.path.exists(calib_path):
+        try:
+            calib = np.load(calib_path)
+            pipeline.set_baseline_motion(
+                float(calib["baseline_mean"]),
+                float(calib["baseline_std"]),
+            )
+            logger.info("Calibration restored from %s", calib_path)
+        except Exception as exc:
+            logger.warning("Could not restore calibration: %s", exc)
 
     # Periodic DB logging (every 5 seconds)
     async def _db_logger():
