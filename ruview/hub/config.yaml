@@ -57,3 +57,8 @@ storage:
 logging:
   level: "INFO"                # DEBUG | INFO | WARNING | ERROR
   file: "/var/log/ruview/hub.log"
+
+# IR blaster node — node_id must match NODE_ID in ir_node/config.h
+# No IP needed — it connects via MQTT like all other nodes
+ir:
+  node_id: "ir_1"

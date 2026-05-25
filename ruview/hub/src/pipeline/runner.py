@@ -1,10 +1,9 @@
 """
-Inference pipeline runner — stable motion-based presence detection.
+Inference pipeline runner — adaptive statistical presence detection.
 
-Detection uses three layers of stability:
-  1. Exponential moving average smoothing (removes flicker)
-  2. Hysteresis (different thresholds to enter vs exit "present" state)
-  3. Hold timer (stays "present" for N seconds after last motion spike)
+Uses z-score detection: presence threshold automatically adapts to
+the room's ambient WiFi noise floor captured during calibration.
+No manual sensitivity tuning needed.
 """
 
 import asyncio
@@ -23,16 +22,13 @@ from .vitals import VitalsExtractor
 logger = logging.getLogger(__name__)
 
 # ── Detection tuning ──────────────────────────────────────────────────────────
-# Confidence to trigger "person present" (entering from absent state)
-_ENTER_THRESHOLD = 0.45
-# Confidence to drop back to "absent" (must be lower than enter — hysteresis)
-_EXIT_THRESHOLD  = 0.20
-# Stay "present" for at least this many seconds after last motion spike
-_HOLD_SECONDS    = 4.0
-# Exponential moving average alpha: 0.2 = very smooth, 0.5 = faster response
-_EMA_ALPHA       = 0.25
-# How hard it is to trigger — increase if too sensitive, decrease if misses you
-_SENSITIVITY     = 6.0
+# How many standard deviations above baseline = "person present"
+# Higher = less sensitive (fewer false positives)
+# Lower  = more sensitive (detects stillness better)
+_Z_ENTER = 2.5   # z-score to trigger presence
+_Z_EXIT  = 1.0   # z-score to drop back to absent (hysteresis)
+_HOLD_SECONDS = 4.0   # stay present N seconds after last motion spike
+_EMA_ALPHA    = 0.25  # smoothing (0.1=very smooth, 0.5=faster response)
 
 
 class InferencePipeline:
@@ -50,12 +46,23 @@ class InferencePipeline:
         self._task: asyncio.Task | None = None
         self._running = False
 
-        # ── Stable detection state ────────────────────────────────────────
-        self._ema_motion: float        = 0.0   # smoothed motion level
-        self._baseline_motion: float   = 0.0   # empty-room baseline
-        self._currently_present: bool  = False  # hysteresis state
-        self._last_motion_time: float  = 0.0   # last time motion was high
-        self._confidence: float        = 0.0   # last published confidence
+        # ── Adaptive detection state ──────────────────────────────────────
+        self._ema_motion: float       = 0.0
+        self._baseline_mean: float    = 0.0
+        self._baseline_std: float     = 1.0   # populated during calibration
+        self._calibrated: bool        = False
+        self._currently_present: bool = False
+        self._last_motion_time: float = 0.0
+
+        # Debug stats exposed via API
+        self.debug: dict = {
+            "raw_motion": 0.0,
+            "ema_motion": 0.0,
+            "z_score":    0.0,
+            "baseline_mean": 0.0,
+            "baseline_std":  1.0,
+            "calibrated":    False,
+        }
 
     async def start(self) -> None:
         self._running = True
@@ -87,51 +94,54 @@ class InferencePipeline:
         if window is None or motion is None:
             return
 
-        # ── Motion signal: use MAX across nodes ───────────────────────────
-        # If ANY node sees you, you're present. Max is more sensitive than mean.
-        per_node = motion.mean(axis=0)          # [n_nodes] — mean over time window
-        raw_motion = float(per_node.max())      # most active node wins
+        # ── Motion: max across nodes (if any node sees you, you're there) ──
+        per_node   = motion.mean(axis=0)      # [n_nodes]
+        raw_motion = float(per_node.max())
 
-        # ── Exponential moving average (smooths out flicker) ──────────────
+        # ── Exponential moving average ─────────────────────────────────────
         self._ema_motion = (_EMA_ALPHA * raw_motion
                             + (1.0 - _EMA_ALPHA) * self._ema_motion)
 
-        # ── Subtract empty-room baseline ──────────────────────────────────
-        above = max(0.0, self._ema_motion - self._baseline_motion)
+        # ── Z-score: how many std devs above empty-room baseline? ──────────
+        z = (self._ema_motion - self._baseline_mean) / (self._baseline_std + 1e-6)
 
-        # ── Map to 0..1 confidence ─────────────────────────────────────────
-        motion_conf = 1.0 - math.exp(-above / max(_SENSITIVITY, 0.1))
+        # Map z-score to 0..1 confidence using sigmoid centered at _Z_ENTER
+        motion_conf = float(1.0 / (1.0 + math.exp(-(z - _Z_ENTER) * 1.5)))
 
         # ── Hysteresis + hold timer ────────────────────────────────────────
         now = time.monotonic()
-
-        if motion_conf >= _ENTER_THRESHOLD:
-            self._last_motion_time = now  # reset hold timer on each spike
+        if z >= _Z_ENTER:
+            self._last_motion_time = now
 
         if not self._currently_present:
-            if motion_conf >= _ENTER_THRESHOLD:
+            if z >= _Z_ENTER:
                 self._currently_present = True
-                logger.info("PRESENCE: detected (conf=%.2f  motion=%.1f  baseline=%.1f)",
-                            motion_conf, self._ema_motion, self._baseline_motion)
+                logger.info("PRESENT  z=%.2f  ema=%.1f  mean=%.1f  std=%.1f",
+                            z, self._ema_motion, self._baseline_mean, self._baseline_std)
         else:
-            # Stay present until BOTH confidence drops AND hold timer expires
             hold_expired = (now - self._last_motion_time) > _HOLD_SECONDS
-            if motion_conf < _EXIT_THRESHOLD and hold_expired:
+            if z < _Z_EXIT and hold_expired:
                 self._currently_present = False
-                logger.info("PRESENCE: left room (conf=%.2f)", motion_conf)
+                logger.info("ABSENT   z=%.2f  ema=%.1f", z, self._ema_motion)
 
-        self._confidence = motion_conf
+        # ── Update debug stats ─────────────────────────────────────────────
+        self.debug.update({
+            "raw_motion":    round(raw_motion, 2),
+            "ema_motion":    round(self._ema_motion, 2),
+            "z_score":       round(z, 3),
+            "baseline_mean": round(self._baseline_mean, 2),
+            "baseline_std":  round(self._baseline_std, 2),
+            "calibrated":    self._calibrated,
+        })
 
-        # ── RuVector ML inference (for pose / vitals) ─────────────────────
+        # ── RuVector ML (pose / vitals) ────────────────────────────────────
         fused  = fuse_nodes(window, node_weights=self._node_weights,
                             baseline=self._model._baseline)
         result = self._model.infer(fused)
 
-        # ── Vitals ────────────────────────────────────────────────────────
         self._vitals.update(motion)
         vitals = self._vitals.extract()
 
-        # ── Write state ───────────────────────────────────────────────────
         zone = self._estimate_zone(result["joints"]) if self._currently_present else ""
         await self._state.update_presence(
             present      = self._currently_present,
@@ -153,11 +163,15 @@ class InferencePipeline:
             self._state.inference_count     += 1
             self._state.inference_latency_ms = result["latency_ms"]
 
-    def set_baseline_motion(self, baseline: float) -> None:
-        self._baseline_motion   = baseline
-        self._ema_motion        = baseline   # reset EMA to baseline level
+    def set_baseline_motion(self, mean: float, std: float) -> None:
+        """Called after calibration with empty-room motion statistics."""
+        self._baseline_mean    = mean
+        self._baseline_std     = max(std, 0.5)   # floor to avoid division issues
+        self._ema_motion       = mean             # reset EMA to baseline
+        self._calibrated       = True
         self._currently_present = False
-        logger.info("Motion baseline set: %.3f — detection ready", baseline)
+        logger.info("Baseline set  mean=%.2f  std=%.2f  enter_threshold=%.2f",
+                    mean, std, mean + _Z_ENTER * std)
 
     def _estimate_zone(self, joints) -> str:
         hip_x = (joints[11, 0] + joints[12, 0]) / 2.0

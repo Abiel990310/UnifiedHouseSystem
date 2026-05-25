@@ -21,6 +21,7 @@ import time
 
 from contextlib import asynccontextmanager
 
+import numpy as np
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -28,6 +29,7 @@ from fastapi.responses import FileResponse
 from .core.config import load_config
 from .core.state import SystemState
 from .core.logger import setup_logging
+from .ir_proxy import IrController
 from .mqtt.client import MqttClient
 from .pipeline.ruvector import RuVectorModel
 from .pipeline.runner import InferencePipeline
@@ -76,6 +78,19 @@ async def lifespan(app: FastAPI):
     pipeline = InferencePipeline(cfg, state, model)
     await pipeline.start()
 
+    # Restore calibration baseline if saved
+    calib_path = os.path.join(os.path.dirname(cfg.storage.db_path), "calibration.npz")
+    if os.path.exists(calib_path):
+        try:
+            calib = np.load(calib_path)
+            pipeline.set_baseline_motion(
+                float(calib["baseline_mean"]),
+                float(calib["baseline_std"]),
+            )
+            logger.info("Calibration restored from %s", calib_path)
+        except Exception as exc:
+            logger.warning("Could not restore calibration: %s", exc)
+
     # Periodic DB logging (every 5 seconds)
     async def _db_logger():
         while True:
@@ -99,12 +114,17 @@ async def lifespan(app: FastAPI):
     db_log_task   = asyncio.create_task(_db_logger(), name="db_logger")
     db_purge_task = asyncio.create_task(_db_purge(),  name="db_purge")
 
+    # IR controller (publishes MQTT commands, no IP needed)
+    ir = IrController(node_id=cfg.ir.node_id)
+    mqtt._ir_controller = ir   # wire up so MQTT heartbeats update IR state
+
     # Attach to app state so routes can access them
     app.state.config       = cfg
     app.state.system_state = state
     app.state.model        = model
     app.state.pipeline     = pipeline
     app.state.db           = db
+    app.state.ir           = ir
 
     logger.info("RuView Hub ready on http://%s:%d", cfg.api.host, cfg.api.port)
     yield
