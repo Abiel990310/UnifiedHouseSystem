@@ -67,8 +67,7 @@ class LoggingConfig:
 
 @dataclass
 class IrConfig:
-    esp32_ip: str = "192.168.1.200"   # IP of the IR ESP32 (check your router)
-    port: int = 80
+    node_id: str = "ir_1"   # must match NODE_ID in ir_node/config.h
 
 
 @dataclass

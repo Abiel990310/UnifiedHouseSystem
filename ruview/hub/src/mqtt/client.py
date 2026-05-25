@@ -26,6 +26,8 @@ class MqttClient:
 
         # LED node state tracked from MQTT heartbeats
         self.led_nodes: dict = {}
+        # IR node state — updated by _handle_ir_status, read by IrController
+        self._ir_controller = None   # set by main after IrController is created
 
     async def start(self) -> None:
         self._running = True
@@ -71,7 +73,8 @@ class MqttClient:
                     await client.subscribe(Topics.NODE_CSI,       qos=0)
                     await client.subscribe(Topics.NODE_STATUS,     qos=1)
                     await client.subscribe(Topics.LED_STATUS_SUB,  qos=1)
-                    logger.info("Subscribed to CSI, node status, and LED status topics")
+                    await client.subscribe(Topics.IR_STATUS_SUB,   qos=1)
+                    logger.info("Subscribed to CSI, node status, LED status, and IR status topics")
 
                     async for message in client.messages:
                         if not self._running:
@@ -99,8 +102,10 @@ class MqttClient:
             node_id = Topics.node_id_from_topic(topic)
             await self._handle_status(node_id, data)
         elif topic.startswith("home/led/") and topic.endswith("/status"):
-            led_id = Topics.led_id_from_status_topic(topic)
+            led_id = Topics.device_id_from_home_topic(topic)
             self._handle_led_status(led_id, data)
+        elif topic.startswith("home/ir/") and topic.endswith("/status"):
+            self._handle_ir_status(data)
 
     async def _handle_csi(self, node_id: str, data: dict) -> None:
         amp     = data.get("a", [])
@@ -142,3 +147,9 @@ class MqttClient:
         }
         logger.debug("LED %s  preset=%s  rssi=%d", led_id,
                      self.led_nodes[led_id]["preset"], self.led_nodes[led_id]["rssi"])
+
+    def _handle_ir_status(self, data: dict) -> None:
+        if self._ir_controller is not None:
+            self._ir_controller.update_from_status(data)
+            logger.debug("IR node  online=%s  ac=%s  light=%s",
+                         data.get("online"), data.get("ac_power"), data.get("light"))

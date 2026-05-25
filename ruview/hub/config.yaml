@@ -58,8 +58,7 @@ logging:
   level: "INFO"                # DEBUG | INFO | WARNING | ERROR
   file: "/var/log/ruview/hub.log"
 
-# IR blaster ESP32 — update esp32_ip to match what your router assigned it
-# (check the Serial Monitor after flashing, it prints the IP)
+# IR blaster node — node_id must match NODE_ID in ir_node/config.h
+# No IP needed — it connects via MQTT like all other nodes
 ir:
-  esp32_ip: "192.168.1.200"
-  port: 80
+  node_id: "ir_1"

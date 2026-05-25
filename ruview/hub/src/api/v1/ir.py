@@ -1,5 +1,5 @@
 """
-IR control — proxies AC and room-light commands to the IR ESP32 node.
+IR control — publishes MQTT commands to the IR node (AC + room light).
 """
 
 import logging
@@ -25,24 +25,22 @@ class LightCommand(BaseModel):
 
 @router.post("/ir/ac", summary="Control air conditioner via IR")
 async def set_ac(cmd: AcCommand, request: Request) -> dict:
-    ir = request.app.state.ir
+    ir   = request.app.state.ir
+    mqtt = request.app.state.mqtt
     try:
         state = await ir.set_ac(
+            mqtt,
             power=cmd.power,
             mode=cmd.mode,
             temp=cmd.temp,
             fan=cmd.fan,
         )
-    except RuntimeError as exc:
-        raise HTTPException(502, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"MQTT publish failed: {exc}") from exc
     return {
         "status": "sent",
-        "ac": {
-            "power": state.ac.power,
-            "mode":  state.ac.mode,
-            "temp":  state.ac.temp,
-            "fan":   state.ac.fan,
-        },
+        "ac": {"power": state.ac.power, "mode": state.ac.mode,
+               "temp": state.ac.temp,  "fan": state.ac.fan},
     }
 
 
@@ -50,26 +48,21 @@ async def set_ac(cmd: AcCommand, request: Request) -> dict:
 async def set_light(cmd: LightCommand, request: Request) -> dict:
     if cmd.power not in ("on", "off"):
         raise HTTPException(400, "power must be 'on' or 'off'")
-    ir = request.app.state.ir
+    ir   = request.app.state.ir
+    mqtt = request.app.state.mqtt
     try:
-        state = await ir.set_light(cmd.power)
-    except RuntimeError as exc:
-        raise HTTPException(502, str(exc)) from exc
+        state = await ir.set_light(mqtt, cmd.power)
+    except Exception as exc:
+        raise HTTPException(502, f"MQTT publish failed: {exc}") from exc
     return {"status": "sent", "light": {"power": state.light.power}}
 
 
-@router.get("/ir/status", summary="IR node + current AC/light state")
+@router.get("/ir/status", summary="IR node online status + current AC/light state")
 async def get_ir_status(request: Request) -> dict:
     ir = request.app.state.ir
-    data = await ir.get_status()
     return {
-        "online": ir.online,
-        "ac": {
-            "power": ir.state.ac.power,
-            "mode":  ir.state.ac.mode,
-            "temp":  ir.state.ac.temp,
-            "fan":   ir.state.ac.fan,
-        },
+        "online": ir.state.online,
+        "ac": {"power": ir.state.ac.power, "mode": ir.state.ac.mode,
+               "temp": ir.state.ac.temp,  "fan": ir.state.ac.fan},
         "light": {"power": ir.state.light.power},
-        **data,
     }
