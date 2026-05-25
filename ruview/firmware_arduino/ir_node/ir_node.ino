@@ -53,7 +53,7 @@ void applyAC() {
   daikin.setMode(state.ac_mode);
   daikin.setTemp(state.ac_temp);
   daikin.setFan(state.ac_fan);
-  daikin.send(5);
+  daikin.send(10);
   Serial.printf("[AC] power=%s mode=%d temp=%d\n",
     state.ac_power ? "on" : "off", state.ac_mode, state.ac_temp);
 }
