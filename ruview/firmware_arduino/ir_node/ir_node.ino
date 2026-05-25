@@ -27,8 +27,8 @@
 #include "config.h"
 
 // ── IR ────────────────────────────────────────────────────────────────────────
-IRsend      irsend(IR_SEND_PIN);
-IRDaikinESP daikin(IR_SEND_PIN);
+IRsend      irsend(IR_SEND_PIN, true);
+IRDaikinESP daikin(IR_SEND_PIN, true);
 
 // ── MQTT ──────────────────────────────────────────────────────────────────────
 WiFiClient   wifiClient;
