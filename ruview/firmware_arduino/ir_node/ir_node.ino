@@ -27,8 +27,8 @@
 #include "config.h"
 
 // ── IR ────────────────────────────────────────────────────────────────────────
-IRsend      irsend(IR_SEND_PIN, true);
-IRDaikinESP daikin(IR_SEND_PIN, true);
+IRsend      irsend(IR_SEND_PIN);
+IRDaikinESP daikin(IR_SEND_PIN);
 
 // ── MQTT ──────────────────────────────────────────────────────────────────────
 WiFiClient   wifiClient;
@@ -53,7 +53,7 @@ void applyAC() {
   daikin.setMode(state.ac_mode);
   daikin.setTemp(state.ac_temp);
   daikin.setFan(state.ac_fan);
-  daikin.send();
+  daikin.send(5);
   Serial.printf("[AC] power=%s mode=%d temp=%d\n",
     state.ac_power ? "on" : "off", state.ac_mode, state.ac_temp);
 }
