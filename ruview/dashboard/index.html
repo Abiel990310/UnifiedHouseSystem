@@ -3,121 +3,238 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RuView — WiFi CSI Tracker</title>
+  <title>Unified House Control</title>
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
   <header class="header">
     <div class="header-inner">
       <div class="logo">
         <span class="logo-icon">&#9632;</span>
-        <span class="logo-text">RuView</span>
-        <span class="logo-sub">WiFi CSI Tracker</span>
+        <span class="logo-text">Unified House</span>
       </div>
       <div class="header-status">
         <span id="ws-badge" class="badge badge--offline">Offline</span>
-        <span id="inference-rate" class="stat-chip" title="Inference count"></span>
+        <span id="clock" class="clock"></span>
       </div>
     </div>
   </header>
 
   <main class="layout">
-    <!-- ── Left panel: Presence + Vitals ────────────────────────── -->
-    <section class="panel panel--left">
-      <!-- Presence card -->
-      <div class="card" id="presence-card">
-        <div class="card-title">Presence</div>
-        <div class="presence-display">
-          <div id="presence-icon" class="presence-icon presence-icon--absent">
-            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="32" cy="20" r="10" stroke="currentColor" stroke-width="3"/>
-              <path d="M10 58 C10 42 54 42 54 58" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="presence-info">
-            <div id="presence-label" class="presence-label">No one detected</div>
-            <div id="presence-conf" class="presence-conf">Confidence: --</div>
-            <div id="presence-zone" class="presence-zone"></div>
-          </div>
-        </div>
-        <div class="confidence-bar-wrap">
-          <div class="confidence-bar-bg">
-            <div id="confidence-bar" class="confidence-bar" style="width:0%"></div>
-          </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         MOOD LIGHTING  (full-width top section)
+    ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="card section-lighting">
+      <div class="section-header">
+        <span class="section-title">Mood Lighting</span>
+        <div class="led-nodes" id="led-nodes">
+          <!-- filled by JS -->
         </div>
       </div>
 
-      <!-- Vitals card -->
-      <div class="card" id="vitals-card">
-        <div class="card-title">Vitals</div>
-        <div class="vitals-grid">
-          <div class="vital-box">
-            <div class="vital-icon">&#9670;</div>
-            <div class="vital-value" id="breathing-rate">--</div>
-            <div class="vital-label">breaths/min</div>
-            <div class="vital-conf" id="breathing-conf">conf: --</div>
-          </div>
-          <div class="vital-box">
-            <div class="vital-icon">&#9829;</div>
-            <div class="vital-value" id="heart-rate">--</div>
-            <div class="vital-label">bpm</div>
-            <div class="vital-conf" id="heart-conf">conf: --</div>
-          </div>
+      <!-- Target selector -->
+      <div class="target-row">
+        <span class="field-label">Control</span>
+        <div class="pill-group" id="led-target">
+          <button class="pill pill--active" data-val="all">All Nodes</button>
+          <button class="pill" data-val="led_1">LED 1</button>
+          <button class="pill" data-val="led_2">LED 2</button>
+          <button class="pill" data-val="led_3">LED 3</button>
         </div>
       </div>
 
-      <!-- Node status card -->
-      <div class="card">
-        <div class="card-title">Sensor Nodes</div>
-        <div id="nodes-list" class="nodes-list">
-          <div class="node-row node-row--loading">Loading...</div>
-        </div>
+      <!-- Preset grid -->
+      <div class="preset-grid" id="preset-grid">
+        <button class="preset-btn" data-preset="off">
+          <span class="preset-icon">&#9679;</span>
+          <span>Off</span>
+        </button>
+        <button class="preset-btn" data-preset="chill">
+          <span class="preset-icon" style="color:#ffd580">&#9728;</span>
+          <span>Chill</span>
+        </button>
+        <button class="preset-btn" data-preset="focus">
+          <span class="preset-icon" style="color:#e8f4ff">&#9888;</span>
+          <span>Focus</span>
+        </button>
+        <button class="preset-btn" data-preset="sleep">
+          <span class="preset-icon" style="color:#c03030">&#9790;</span>
+          <span>Sleep</span>
+        </button>
+        <button class="preset-btn" data-preset="party">
+          <span class="preset-icon" style="color:#bf5fff">&#9733;</span>
+          <span>Party</span>
+        </button>
+        <button class="preset-btn" data-preset="sunset">
+          <span class="preset-icon" style="color:#ff7830">&#9685;</span>
+          <span>Sunset</span>
+        </button>
+        <button class="preset-btn" data-preset="ocean">
+          <span class="preset-icon" style="color:#30b8d0">&#9651;</span>
+          <span>Ocean</span>
+        </button>
+        <button class="preset-btn" data-preset="custom" id="custom-btn">
+          <span class="preset-icon">&#9670;</span>
+          <span>Custom</span>
+        </button>
       </div>
+
+      <!-- Custom color row (hidden unless custom selected) -->
+      <div class="custom-row" id="custom-row" style="display:none">
+        <span class="field-label">Color</span>
+        <input type="color" id="color-picker" value="#ff5020" class="color-picker">
+        <span class="color-hex" id="color-hex">#ff5020</span>
+      </div>
+
+      <!-- Brightness -->
+      <div class="brightness-row">
+        <span class="field-label">Brightness</span>
+        <input type="range" id="brightness-slider" min="10" max="200" value="160" class="slider">
+        <span class="slider-val" id="brightness-val">160</span>
+      </div>
+
+      <div id="led-feedback" class="feedback"></div>
     </section>
 
-    <!-- ── Center: Room map ──────────────────────────────────────── -->
-    <section class="panel panel--center">
-      <div class="card card--full">
-        <div class="card-title">
-          Room Map
-          <span class="card-title-sub" id="room-dims"></span>
-        </div>
-        <div class="room-map-container">
-          <canvas id="room-canvas"></canvas>
+    <!-- ══════════════════════════════════════════════════════════════════════
+         AC CONTROL  (left column)
+    ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="card section-ac">
+      <div class="section-header">
+        <span class="section-title">Air Con</span>
+        <span id="ir-status" class="ir-dot ir-dot--offline" title="IR node status"></span>
+      </div>
+
+      <!-- Power -->
+      <div class="ac-power-row">
+        <button class="power-btn power-btn--on"  id="ac-on"  onclick="acPower('on')">ON</button>
+        <button class="power-btn power-btn--off" id="ac-off" onclick="acPower('off')">OFF</button>
+      </div>
+
+      <!-- Temperature -->
+      <div class="ac-temp-row">
+        <button class="temp-btn" onclick="acTempDelta(-1)">&#8722;</button>
+        <span id="ac-temp-val" class="ac-temp-val">25</span>
+        <span class="ac-temp-unit">°C</span>
+        <button class="temp-btn" onclick="acTempDelta(+1)">&#43;</button>
+      </div>
+
+      <!-- Mode -->
+      <div class="field-row">
+        <span class="field-label">Mode</span>
+        <div class="pill-group" id="ac-mode">
+          <button class="pill pill--active" data-val="cool">Cool</button>
+          <button class="pill" data-val="heat">Heat</button>
+          <button class="pill" data-val="fan">Fan</button>
+          <button class="pill" data-val="dry">Dry</button>
+          <button class="pill" data-val="auto">Auto</button>
         </div>
       </div>
+
+      <!-- Fan -->
+      <div class="field-row">
+        <span class="field-label">Fan</span>
+        <div class="pill-group" id="ac-fan">
+          <button class="pill pill--active" data-val="auto">Auto</button>
+          <button class="pill" data-val="low">Low</button>
+          <button class="pill" data-val="med">Med</button>
+          <button class="pill" data-val="high">High</button>
+        </div>
+      </div>
+
+      <button class="btn btn--send" id="ac-send-btn" onclick="acSend()">Apply</button>
+      <div id="ac-feedback" class="feedback"></div>
     </section>
 
-    <!-- ── Right panel: Motion + History ───────────────────────── -->
-    <section class="panel panel--right">
-      <!-- Motion energy chart -->
-      <div class="card">
-        <div class="card-title">Motion Energy</div>
-        <canvas id="motion-chart" height="100"></canvas>
+    <!-- ══════════════════════════════════════════════════════════════════════
+         ROOM LIGHT  (right column)
+    ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="card section-light">
+      <div class="section-header">
+        <span class="section-title">Room Light</span>
       </div>
 
-      <!-- Breathing waveform -->
-      <div class="card">
-        <div class="card-title">Breathing Signal</div>
-        <canvas id="breathing-chart" height="80"></canvas>
+      <div class="light-toggle-wrap">
+        <button class="light-btn" id="light-on-btn"  onclick="lightSet('on')">
+          <span class="light-icon">&#9728;</span>
+          <span>On</span>
+        </button>
+        <button class="light-btn light-btn--off" id="light-off-btn" onclick="lightSet('off')">
+          <span class="light-icon">&#9685;</span>
+          <span>Off</span>
+        </button>
       </div>
 
-      <!-- Inference stats -->
-      <div class="card">
-        <div class="card-title">System</div>
-        <div class="stats-grid">
-          <div class="stat"><span class="stat-label">Latency</span><span id="latency" class="stat-val">--</span></div>
-          <div class="stat"><span class="stat-label">Inferences</span><span id="inf-count" class="stat-val">--</span></div>
-          <div class="stat"><span class="stat-label">Uptime</span><span id="uptime" class="stat-val">--</span></div>
-          <div class="stat"><span class="stat-label">Calibrated</span><span id="calibrated" class="stat-val">--</span></div>
-        </div>
-        <button class="btn btn--calibrate" id="calibrate-btn">Calibrate Room</button>
-      </div>
+      <div id="light-feedback" class="feedback"></div>
     </section>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         HUMAN DETECTION  (collapsed — code preserved, not in use)
+    ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="card section-detection">
+      <details>
+        <summary class="detection-summary">
+          <span class="section-title">Human Detection</span>
+          <span class="badge-dormant">Dormant</span>
+        </summary>
+
+        <div class="detection-body">
+          <!-- Presence -->
+          <div class="presence-display">
+            <div id="presence-icon" class="presence-icon presence-icon--absent">
+              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="32" cy="20" r="10" stroke="currentColor" stroke-width="3"/>
+                <path d="M10 58 C10 42 54 42 54 58" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="presence-info">
+              <div id="presence-label" class="presence-label">No one detected</div>
+              <div id="presence-conf"  class="presence-conf">Confidence: --</div>
+              <div id="presence-zone"  class="presence-zone"></div>
+            </div>
+          </div>
+
+          <!-- Vitals -->
+          <div class="vitals-grid">
+            <div class="vital-box">
+              <div class="vital-icon">&#9670;</div>
+              <div class="vital-value" id="breathing-rate">--</div>
+              <div class="vital-label">breaths/min</div>
+            </div>
+            <div class="vital-box">
+              <div class="vital-icon">&#9829;</div>
+              <div class="vital-value" id="heart-rate">--</div>
+              <div class="vital-label">bpm</div>
+            </div>
+          </div>
+
+          <!-- Nodes -->
+          <div id="nodes-list" class="nodes-list">
+            <div class="node-row node-row--loading">CSI nodes offline</div>
+          </div>
+
+          <!-- Calibrate -->
+          <button class="btn btn--calibrate" id="calibrate-btn" style="margin-top:12px">
+            Calibrate Room
+          </button>
+
+          <!-- System mini-stats -->
+          <div class="stats-grid" style="margin-top:12px">
+            <div class="stat"><span class="stat-label">Latency</span><span id="latency" class="stat-val">--</span></div>
+            <div class="stat"><span class="stat-label">Inferences</span><span id="inf-count" class="stat-val">--</span></div>
+            <div class="stat"><span class="stat-label">Uptime</span><span id="uptime" class="stat-val">--</span></div>
+            <div class="stat"><span class="stat-label">Calibrated</span><span id="calibrated" class="stat-val">--</span></div>
+          </div>
+        </div>
+      </details>
+    </section>
+
   </main>
 
   <script src="/static/js/ws.js"></script>
-  <script src="/static/js/room_map.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
 </html>

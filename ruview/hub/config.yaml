@@ -57,3 +57,9 @@ storage:
 logging:
   level: "INFO"                # DEBUG | INFO | WARNING | ERROR
   file: "/var/log/ruview/hub.log"
+
+# IR blaster ESP32 — update esp32_ip to match what your router assigned it
+# (check the Serial Monitor after flashing, it prints the IP)
+ir:
+  esp32_ip: "192.168.1.200"
+  port: 80

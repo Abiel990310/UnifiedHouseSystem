@@ -66,6 +66,12 @@ class LoggingConfig:
 
 
 @dataclass
+class IrConfig:
+    esp32_ip: str = "192.168.1.200"   # IP of the IR ESP32 (check your router)
+    port: int = 80
+
+
+@dataclass
 class HubConfig:
     api: ApiConfig = field(default_factory=ApiConfig)
     mqtt: MqttConfig = field(default_factory=MqttConfig)
@@ -75,6 +81,7 @@ class HubConfig:
     vitals: VitalsConfig = field(default_factory=VitalsConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    ir: IrConfig = field(default_factory=IrConfig)
 
 
 def _merge(base: dict, override: dict) -> dict:
@@ -111,4 +118,5 @@ def load_config(config_dir: Optional[str] = None) -> HubConfig:
     cfg.vitals   = VitalsConfig(**data.get("vitals", {}))
     cfg.storage  = StorageConfig(**data.get("storage", {}))
     cfg.logging  = LoggingConfig(**data.get("logging", {}))
+    cfg.ir       = IrConfig(**data.get("ir", {}))
     return cfg

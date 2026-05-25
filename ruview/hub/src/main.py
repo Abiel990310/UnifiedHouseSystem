@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse
 from .core.config import load_config
 from .core.state import SystemState
 from .core.logger import setup_logging
+from .ir_proxy import IrProxy
 from .mqtt.client import MqttClient
 from .pipeline.ruvector import RuVectorModel
 from .pipeline.runner import InferencePipeline
@@ -113,12 +114,16 @@ async def lifespan(app: FastAPI):
     db_log_task   = asyncio.create_task(_db_logger(), name="db_logger")
     db_purge_task = asyncio.create_task(_db_purge(),  name="db_purge")
 
+    # IR proxy (HTTP client to IR ESP32 blaster)
+    ir = IrProxy(cfg.ir.esp32_ip, cfg.ir.port)
+
     # Attach to app state so routes can access them
     app.state.config       = cfg
     app.state.system_state = state
     app.state.model        = model
     app.state.pipeline     = pipeline
     app.state.db           = db
+    app.state.ir           = ir
 
     logger.info("RuView Hub ready on http://%s:%d", cfg.api.host, cfg.api.port)
     yield

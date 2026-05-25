@@ -1,5 +1,6 @@
 """
 Async MQTT subscriber that feeds incoming CSI frames into SystemState.
+Also subscribes to LED node status heartbeats and exposes a publish() method.
 """
 
 import asyncio
@@ -23,6 +24,9 @@ class MqttClient:
         self._task: asyncio.Task | None = None
         self._running = False
 
+        # LED node state tracked from MQTT heartbeats
+        self.led_nodes: dict = {}
+
     async def start(self) -> None:
         self._running = True
         self._task = asyncio.create_task(self._run(), name="mqtt_client")
@@ -38,6 +42,19 @@ class MqttClient:
                 pass
         logger.info("MQTT client stopped")
 
+    async def publish(self, topic: str, payload: str, retain: bool = False) -> None:
+        """Publish a single message via a short-lived connection."""
+        try:
+            async with aiomqtt.Client(
+                hostname=self._cfg.host,
+                port=self._cfg.port,
+                identifier=f"{self._cfg.client_id}_pub",
+            ) as client:
+                await client.publish(topic, payload, retain=retain)
+        except Exception as exc:
+            logger.warning("MQTT publish error on %s: %s", topic, exc)
+            raise
+
     async def _run(self) -> None:
         reconnect_delay = 2
         while self._running:
@@ -51,9 +68,10 @@ class MqttClient:
                     reconnect_delay = 2  # reset on success
                     logger.info("Connected to MQTT broker")
 
-                    await client.subscribe(Topics.NODE_CSI,    qos=0)
-                    await client.subscribe(Topics.NODE_STATUS, qos=1)
-                    logger.info("Subscribed to %s and %s", Topics.NODE_CSI, Topics.NODE_STATUS)
+                    await client.subscribe(Topics.NODE_CSI,       qos=0)
+                    await client.subscribe(Topics.NODE_STATUS,     qos=1)
+                    await client.subscribe(Topics.LED_STATUS_SUB,  qos=1)
+                    logger.info("Subscribed to CSI, node status, and LED status topics")
 
                     async for message in client.messages:
                         if not self._running:
@@ -74,12 +92,15 @@ class MqttClient:
             logger.debug("Invalid JSON on topic %s", topic)
             return
 
-        node_id = Topics.node_id_from_topic(topic)
-
         if topic.endswith("/csi"):
+            node_id = Topics.node_id_from_topic(topic)
             await self._handle_csi(node_id, data)
-        elif topic.endswith("/status"):
+        elif "/node/" in topic and topic.endswith("/status"):
+            node_id = Topics.node_id_from_topic(topic)
             await self._handle_status(node_id, data)
+        elif topic.startswith("home/led/") and topic.endswith("/status"):
+            led_id = Topics.led_id_from_status_topic(topic)
+            self._handle_led_status(led_id, data)
 
     async def _handle_csi(self, node_id: str, data: dict) -> None:
         amp     = data.get("a", [])
@@ -108,3 +129,16 @@ class MqttClient:
             rssi=int(data.get("rssi", -127)),
             csi_active=bool(data.get("csi_active", False)),
         )
+
+    def _handle_led_status(self, led_id: str, data: dict) -> None:
+        if not led_id:
+            return
+        self.led_nodes[led_id] = {
+            "online":     bool(data.get("online", False)),
+            "preset":     data.get("preset", "off"),
+            "brightness": int(data.get("brightness", 0)),
+            "rssi":       int(data.get("rssi", -127)),
+            "last_seen":  time.time(),
+        }
+        logger.debug("LED %s  preset=%s  rssi=%d", led_id,
+                     self.led_nodes[led_id]["preset"], self.led_nodes[led_id]["rssi"])
