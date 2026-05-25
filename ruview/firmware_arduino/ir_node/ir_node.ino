@@ -1,5 +1,5 @@
 /*
- * IR Node — MQTT-controlled AC + light blaster
+ * IR Node — MQTT-controlled AC + light (Daikin + Panasonic)
  *
  * Libraries (install via Arduino Library Manager):
  *   - IRremoteESP8266  by crankyoldgit
@@ -7,49 +7,28 @@
  *   - ArduinoJson      by Benoit Blanchon
  *
  * Board:   ESP32 Dev Module
- * Edit config.h with your WiFi + MQTT broker IP before uploading.
- * Set NODE_ID to "ir_1" (or ir_2 if you have more than one).
  *
  * MQTT command topic:  home/ir/<NODE_ID>/set
  * MQTT broadcast:      home/ir/all/set
  *
- * Command JSON examples:
- *   {"device":"ac","power":"on","mode":"cool","temp":25,"fan":"auto"}
+ * Command JSON:
+ *   {"device":"ac","power":"on","mode":"cool","temp":24,"fan":"auto"}
  *   {"device":"ac","power":"off"}
- *   {"device":"ac","temp":22}           // change temp only
+ *   {"device":"ac","temp":22}
  *   {"device":"light","power":"on"}
  *   {"device":"light","power":"off"}
  */
 
+#include <IRsend.h>
+#include <ir_Daikin.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <IRsend.h>
-
-#ifdef IR_AC_DAIKIN
-  #include <ir_Daikin.h>
-#elif defined(IR_AC_MITSUBISHI)
-  #include <ir_Mitsubishi.h>
-#elif defined(IR_AC_SAMSUNG)
-  #include <ir_Samsung.h>
-#elif defined(IR_AC_LG)
-  #include <ir_LG.h>
-#endif
-
 #include "config.h"
 
-// ── IR sender ─────────────────────────────────────────────────────────────────
-IRsend irsend(IR_PIN);
-
-#ifdef IR_AC_DAIKIN
-  IRDaikinESP ac(IR_PIN);
-#elif defined(IR_AC_MITSUBISHI)
-  IRMitsubishiAC ac(IR_PIN);
-#elif defined(IR_AC_SAMSUNG)
-  IRSamsungAc ac(IR_PIN);
-#elif defined(IR_AC_LG)
-  IRLgAc ac(IR_PIN);
-#endif
+// ── IR ────────────────────────────────────────────────────────────────────────
+IRsend      irsend(IR_SEND_PIN);
+IRDaikinESP daikin(IR_SEND_PIN);
 
 // ── MQTT ──────────────────────────────────────────────────────────────────────
 WiFiClient   wifiClient;
@@ -59,59 +38,44 @@ char topic_set[48];
 char topic_all[32]    = "home/ir/all/set";
 char topic_status[48];
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ── State (mirrors your original code defaults) ───────────────────────────────
 struct {
-  bool    ac_power  = false;
-  char    ac_mode[8] = "cool";
-  uint8_t ac_temp   = 25;
-  char    ac_fan[8] = "auto";
-  bool    light_on  = false;
+  bool    ac_power = false;
+  uint8_t ac_mode  = DAIKIN_COOL;
+  uint8_t ac_temp  = 24;
+  uint8_t ac_fan   = DAIKIN_FAN_AUTO;
+  bool    light_on = false;
 } state;
 
-// ── IR helpers ────────────────────────────────────────────────────────────────
-void sendAC() {
-#ifdef IR_AC_DAIKIN
-  ac.setPower(state.ac_power);
-  if      (strcmp(state.ac_mode, "cool") == 0) ac.setMode(kDaikinCool);
-  else if (strcmp(state.ac_mode, "heat") == 0) ac.setMode(kDaikinHeat);
-  else if (strcmp(state.ac_mode, "fan")  == 0) ac.setMode(kDaikinFan);
-  else if (strcmp(state.ac_mode, "dry")  == 0) ac.setMode(kDaikinDry);
-  else                                          ac.setMode(kDaikinAuto);
-  ac.setTemp(state.ac_temp);
-  if      (strcmp(state.ac_fan, "low")  == 0) ac.setFan(kDaikinFanMin);
-  else if (strcmp(state.ac_fan, "med")  == 0) ac.setFan(3);
-  else if (strcmp(state.ac_fan, "high") == 0) ac.setFan(kDaikinFanMax);
-  else                                        ac.setFan(kDaikinFanAuto);
-  ac.send();
-#elif defined(IR_AC_MITSUBISHI)
-  ac.setPower(state.ac_power);
-  if      (strcmp(state.ac_mode, "cool") == 0) ac.setMode(kMitsubishiAcCool);
-  else if (strcmp(state.ac_mode, "heat") == 0) ac.setMode(kMitsubishiAcHeat);
-  else if (strcmp(state.ac_mode, "dry")  == 0) ac.setMode(kMitsubishiAcDry);
-  else if (strcmp(state.ac_mode, "fan")  == 0) ac.setMode(kMitsubishiAcFan);
-  else                                          ac.setMode(kMitsubishiAcAuto);
-  ac.setTemp(state.ac_temp);
-  if      (strcmp(state.ac_fan, "low")  == 0) ac.setFan(kMitsubishiAcFanSilent);
-  else if (strcmp(state.ac_fan, "high") == 0) ac.setFan(kMitsubishiAcFanRealMax);
-  else                                        ac.setFan(kMitsubishiAcFanAuto);
-  ac.send();
-#else
-  Serial.println("[IR] AC brand not configured — define IR_AC_* in config.h");
-#endif
-  Serial.printf("[AC] power=%s mode=%s temp=%d fan=%s\n",
-    state.ac_power ? "on" : "off", state.ac_mode, state.ac_temp, state.ac_fan);
+// ── Helpers ───────────────────────────────────────────────────────────────────
+void applyAC() {
+  daikin.setPower(state.ac_power);
+  daikin.setMode(state.ac_mode);
+  daikin.setTemp(state.ac_temp);
+  daikin.setFan(state.ac_fan);
+  daikin.send();
+  Serial.printf("[AC] power=%s mode=%d temp=%d\n",
+    state.ac_power ? "on" : "off", state.ac_mode, state.ac_temp);
 }
 
-void sendLight(bool on) {
-#ifdef IR_LIGHT_PANASONIC_NEC
-  irsend.sendNEC(on ? LIGHT_ON_CODE : LIGHT_OFF_CODE, 32);
-#else
-  Serial.println("[IR] Light brand not configured — define IR_LIGHT_* in config.h");
-#endif
+void applyLight(bool on) {
+  irsend.sendPanasonic(0x4004, on ? LIGHT_ON : LIGHT_OFF, 40);
   Serial.printf("[Light] %s\n", on ? "ON" : "OFF");
 }
 
-// ── MQTT message handler ──────────────────────────────────────────────────────
+uint8_t modeFromStr(const char* s) {
+  if (strcmp(s, "heat") == 0) return DAIKIN_HEAT;
+  if (strcmp(s, "auto") == 0) return DAIKIN_AUTO;
+  return DAIKIN_COOL;
+}
+
+const char* modeToStr(uint8_t m) {
+  if (m == DAIKIN_HEAT) return "heat";
+  if (m == DAIKIN_AUTO) return "auto";
+  return "cool";
+}
+
+// ── MQTT callback ─────────────────────────────────────────────────────────────
 void onMessage(char* topic, byte* payload, unsigned int length) {
   StaticJsonDocument<128> doc;
   if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
@@ -120,24 +84,20 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
 
   if (strcmp(device, "ac") == 0) {
     if (doc.containsKey("power")) state.ac_power = (strcmp(doc["power"] | "off", "on") == 0);
-    if (doc.containsKey("mode"))  strlcpy(state.ac_mode, doc["mode"] | "cool", sizeof(state.ac_mode));
-    if (doc.containsKey("temp"))  state.ac_temp  = (uint8_t)constrain((int)(doc["temp"] | 25), 16, 30);
-    if (doc.containsKey("fan"))   strlcpy(state.ac_fan,  doc["fan"]  | "auto", sizeof(state.ac_fan));
-    sendAC();
+    if (doc.containsKey("mode"))  state.ac_mode  = modeFromStr(doc["mode"] | "cool");
+    if (doc.containsKey("temp"))  state.ac_temp  = (uint8_t)constrain((int)(doc["temp"] | 24), 16, 30);
+    applyAC();
 
   } else if (strcmp(device, "light") == 0) {
-    if (doc.containsKey("power")) {
-      state.light_on = (strcmp(doc["power"] | "off", "on") == 0);
-      sendLight(state.light_on);
-    }
+    state.light_on = (strcmp(doc["power"] | "off", "on") == 0);
+    applyLight(state.light_on);
   }
 }
 
 // ── WiFi ──────────────────────────────────────────────────────────────────────
 void connectWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.setSleep(true);
   Serial.print("WiFi");
   int tries = 0;
   while (WiFi.status() != WL_CONNECTED && ++tries < 40) {
@@ -166,19 +126,21 @@ void connectMQTT() {
   }
 }
 
-// ── Setup + loop ──────────────────────────────────────────────────────────────
+// ── Setup ─────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
-  delay(300);
+  delay(2000);
   Serial.printf("\n=== IR Node %s ===\n", NODE_ID);
 
   snprintf(topic_set,    sizeof(topic_set),    "home/ir/%s/set",    NODE_ID);
   snprintf(topic_status, sizeof(topic_status), "home/ir/%s/status", NODE_ID);
 
   irsend.begin();
-#if defined(IR_AC_DAIKIN) || defined(IR_AC_MITSUBISHI) || defined(IR_AC_SAMSUNG) || defined(IR_AC_LG)
-  ac.begin();
-#endif
+  daikin.begin();
+  daikin.setPower(false);
+  daikin.setMode(DAIKIN_COOL);
+  daikin.setTemp(24);
+  daikin.setFan(DAIKIN_FAN_AUTO);
 
   connectWiFi();
 
@@ -190,12 +152,12 @@ void setup() {
   Serial.printf("Ready. Listening on %s\n", topic_set);
 }
 
+// ── Loop ──────────────────────────────────────────────────────────────────────
 void loop() {
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
   if (!mqtt.connected())             connectMQTT();
   mqtt.loop();
 
-  // Heartbeat every 30s
   static unsigned long lastHB = 0;
   unsigned long now = millis();
   if (now - lastHB >= 30000) {
@@ -203,9 +165,10 @@ void loop() {
     char msg[128];
     snprintf(msg, sizeof(msg),
       "{\"node_id\":\"%s\",\"online\":true,\"type\":\"ir\","
-      "\"ac_power\":\"%s\",\"ac_temp\":%d,\"light\":\"%s\",\"rssi\":%d}",
+      "\"ac_power\":\"%s\",\"ac_temp\":%d,\"ac_mode\":\"%s\","
+      "\"light\":\"%s\",\"rssi\":%d}",
       NODE_ID, state.ac_power ? "on" : "off", state.ac_temp,
-      state.light_on ? "on" : "off", WiFi.RSSI());
+      modeToStr(state.ac_mode), state.light_on ? "on" : "off", WiFi.RSSI());
     mqtt.publish(topic_status, msg, true);
   }
 }
