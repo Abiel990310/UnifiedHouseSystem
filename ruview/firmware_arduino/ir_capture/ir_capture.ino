@@ -20,7 +20,7 @@
 #include <IRrecv.h>
 #include <IRutils.h>
 
-const uint16_t RECV_PIN     = 2;
+const uint16_t RECV_PIN     = 4;
 const uint16_t BUFFER_SIZE  = 1024;
 const uint8_t  RECV_TIMEOUT = 15;
 
