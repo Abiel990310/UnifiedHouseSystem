@@ -29,9 +29,15 @@ decode_results results;
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(2000);  // wait for USB CDC to connect
   Serial.println("\n=== IR Capture ready ===");
   Serial.println("Point remote at TSOP and press the button.\n");
+
+  // Raw pin test — TSOP OUT idles HIGH, pulses LOW when IR received
+  pinMode(RECV_PIN, INPUT);
+  Serial.printf("TSOP pin %d idle state: %s (should be HIGH)\n",
+    RECV_PIN, digitalRead(RECV_PIN) ? "HIGH" : "LOW");
+
   irrecv.enableIRIn();
 }
 
