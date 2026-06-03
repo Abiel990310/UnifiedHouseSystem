@@ -24,6 +24,7 @@
   let acMode       = "cool";
   let acTemp       = 25;
   let acFan        = "auto";
+  let acSendTimer  = null;
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const wsBadge        = document.getElementById("ws-badge");
@@ -156,11 +157,14 @@
     acPowerState = p;
     document.getElementById("ac-on").classList.toggle("active",  p === "on");
     document.getElementById("ac-off").classList.toggle("active", p === "off");
+    acSend();
   };
 
   window.acTempDelta = function (d) {
     acTemp = Math.max(16, Math.min(30, acTemp + d));
     acTempVal.textContent = acTemp;
+    clearTimeout(acSendTimer);
+    acSendTimer = setTimeout(acSend, 400);
   };
 
   document.getElementById("ac-mode").addEventListener("click", (e) => {
@@ -168,6 +172,7 @@
     if (!btn) return;
     acMode = btn.dataset.val;
     setPillActive("ac-mode", acMode);
+    acSend();
   });
 
   document.getElementById("ac-fan").addEventListener("click", (e) => {
@@ -175,11 +180,11 @@
     if (!btn) return;
     acFan = btn.dataset.val;
     setPillActive("ac-fan", acFan);
+    acSend();
   });
 
-  window.acSend = async function () {
-    const btn = document.getElementById("ac-send-btn");
-    btn.disabled = true;
+  async function acSend() {
+    clearTimeout(acSendTimer);
     try {
       const res  = await fetch("/api/v1/ir/ac", {
         method: "POST",
@@ -188,13 +193,11 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "IR error");
-      setFeedback(acFeedback, `Sent: ${acPowerState} · ${acMode} · ${acTemp}°C · ${acFan}`, "ok");
+      setFeedback(acFeedback, `${acPowerState} · ${acMode} · ${acTemp}°C · ${acFan}`, "ok");
     } catch (e) {
       setFeedback(acFeedback, `Failed: ${e.message}`, "err");
-    } finally {
-      btn.disabled = false;
     }
-  };
+  }
 
   async function pollIrStatus() {
     try {
