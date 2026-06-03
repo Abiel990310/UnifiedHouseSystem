@@ -41,7 +41,18 @@ void setup() {
   irrecv.enableIRIn();
 }
 
+// Raw pin monitor — prints a dot every time the TSOP pulses LOW (any IR burst)
+void checkRawPulse() {
+  static bool lastState = HIGH;
+  bool cur = digitalRead(RECV_PIN);
+  if (cur == LOW && lastState == HIGH) {
+    Serial.print(".");   // any IR activity at all
+  }
+  lastState = cur;
+}
+
 void loop() {
+  checkRawPulse();
   if (!irrecv.decode(&results)) return;
 
   Serial.println("─────────────────────────────");
