@@ -124,6 +124,7 @@ async def lifespan(app: FastAPI):
     app.state.model        = model
     app.state.pipeline     = pipeline
     app.state.db           = db
+    app.state.mqtt         = mqtt
     app.state.ir           = ir
 
     logger.info("RuView Hub ready on http://%s:%d", cfg.api.host, cfg.api.port)

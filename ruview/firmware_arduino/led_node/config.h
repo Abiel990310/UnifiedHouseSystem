@@ -21,4 +21,4 @@
 //  Advanced — no need to change
 // ============================================================
 #define MQTT_PORT        1883
-#define MAX_BRIGHTNESS   200   // cap to protect onboard LED (max 255)
+#define MAX_BRIGHTNESS   250   // onboard WS2812B is rated for 255; 250 is safe

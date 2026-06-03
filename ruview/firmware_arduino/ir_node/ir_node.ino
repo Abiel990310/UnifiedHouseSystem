@@ -53,13 +53,15 @@ void applyAC() {
   daikin.setMode(state.ac_mode);
   daikin.setTemp(state.ac_temp);
   daikin.setFan(state.ac_fan);
-  daikin.send();
+  daikin.send(3);
+  mqtt.loop();
   Serial.printf("[AC] power=%s mode=%d temp=%d\n",
     state.ac_power ? "on" : "off", state.ac_mode, state.ac_temp);
 }
 
 void applyLight(bool on) {
   irsend.sendPanasonic(0x4004, on ? LIGHT_ON : LIGHT_OFF, 40);
+  mqtt.loop();
   Serial.printf("[Light] %s\n", on ? "ON" : "OFF");
 }
 
@@ -96,8 +98,10 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
 
 // ── WiFi ──────────────────────────────────────────────────────────────────────
 void connectWiFi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.mode(WIFI_STA);
   WiFi.setSleep(true);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("WiFi");
   int tries = 0;
   while (WiFi.status() != WL_CONNECTED && ++tries < 40) {
@@ -146,7 +150,8 @@ void setup() {
 
   mqtt.setServer(MQTT_BROKER_IP, MQTT_PORT);
   mqtt.setCallback(onMessage);
-  mqtt.setKeepAlive(30);
+  mqtt.setKeepAlive(15);
+  mqtt.setSocketTimeout(5);
   connectMQTT();
 
   Serial.printf("Ready. Listening on %s\n", topic_set);

@@ -14,7 +14,11 @@ from ...mqtt.topics import Topics
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VALID_PRESETS = {"off", "chill", "focus", "sleep", "party", "sunset", "ocean", "custom"}
+VALID_PRESETS = {
+    "off", "chill", "focus", "sleep", "party", "sunset", "ocean", "custom",
+    "aurora", "fire", "candle", "zen", "neon", "midnight", "rose", "galaxy",
+    "morning", "disco",
+}
 
 
 class LedCommand(BaseModel):
@@ -23,7 +27,7 @@ class LedCommand(BaseModel):
     r:          Optional[int] = Field(None, ge=0, le=255)
     g:          Optional[int] = Field(None, ge=0, le=255)
     b:          Optional[int] = Field(None, ge=0, le=255)
-    brightness: Optional[int] = Field(None, ge=0, le=200)
+    brightness: Optional[int] = Field(None, ge=0, le=250)
 
 
 @router.post("/led/set", summary="Set LED preset or color")
