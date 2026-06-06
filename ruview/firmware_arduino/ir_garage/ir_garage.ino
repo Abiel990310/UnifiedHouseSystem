@@ -1,17 +1,15 @@
 /*
- * IR Capture + Garage Door Sender — ESP32-C3 Super Mini
+ * Garage Door IR Remote — ESP32-C3 Super Mini
  *
- * Step 1 — Capture: point garage remote at TSOP, press its button.
- *           Serial prints the code. Copy the >> send line.
- * Step 2 — Paste that line into sendGarage() below, reflash.
- * Step 3 — Press the BOOT button on the C3 to open/close the garage.
+ * Set CAPTURE_MODE 1 to capture your garage remote code via TSOP.
+ * Set CAPTURE_MODE 0 for normal 24/7 use — CPU light-sleeps until button press.
  *
  * Library:  IRremoteESP8266 by crankyoldgit
  * Board:    ESP32C3 Dev Module  (USB CDC On Boot → Enabled)
  *
  * Wiring:
- *   TSOP1136 OUT  →  GPIO 4    (receiver — for code capture)
- *   TSOP1136 GND  →  GND right pin per your datasheet
+ *   TSOP1136 OUT  →  GPIO 4    (only active in CAPTURE_MODE)
+ *   TSOP1136 GND  →  GND (right pin per your datasheet)
  *   TSOP1136 VCC  →  3.3V
  *
  *   IR LED anode  →  47Ω  →  VIN 5V
@@ -22,24 +20,34 @@
  *   BOOT button   →  GPIO 9 (built-in, active LOW)
  */
 
-#include <IRrecv.h>
+// ── Set to 1 to capture code, 0 for efficient 24/7 running ───────────────────
+#define CAPTURE_MODE 1
+
 #include <IRsend.h>
 #include <IRutils.h>
+#include "esp_sleep.h"
+#if CAPTURE_MODE
+#include <IRrecv.h>
+#endif
 
-const uint16_t RECV_PIN   = 4;
+#include <WiFi.h>   // only to disable it
+
 const uint16_t SEND_PIN   = 3;
 const uint8_t  BUTTON_PIN = 9;
-
+#if CAPTURE_MODE
+const uint16_t RECV_PIN   = 4;
 IRrecv irrecv(RECV_PIN, 1024, 15, true);
-IRsend irsend(SEND_PIN);
 decode_results results;
+#endif
 
-// ── STEP 2: paste your captured line here ─────────────────────────────────────
+IRsend irsend(SEND_PIN);
+
+// ── FILL THIS IN after capturing ──────────────────────────────────────────────
 void sendGarage() {
-  // Examples — replace with your actual line from Serial output:
+  // Paste your captured line here. Examples:
   //   irsend.sendNEC(0x20DF10EF, 32);
   //   irsend.sendSAMSUNG(0xE0E040BF, 32);
-  //   irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), 38);
+  //   irsend.sendRaw(rawData, sizeof(rawData)/sizeof(rawData[0]), 38);
   irsend.sendNEC(0x00000000, 32);   // ← replace this
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,29 +55,30 @@ void sendGarage() {
 void setup() {
   Serial.begin(115200);
   delay(2000);
-  Serial.println("\n=== Garage Remote ===");
-  Serial.println("BOOT button  → send garage code");
-  Serial.println("Point remote → TSOP to capture code\n");
+
+  setCpuFrequencyMhz(80);   // halve clock — plenty for IR, saves power
+  WiFi.mode(WIFI_OFF);      // kill radio — saves ~20mA
+  btStop();                 // kill BT
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   irsend.begin();
+
+#if CAPTURE_MODE
+  Serial.println("\n=== CAPTURE MODE ===");
+  Serial.println("Point garage remote at TSOP and press its button.");
+  Serial.println("Copy the >> send line, paste into sendGarage(), set CAPTURE_MODE 0, reflash.\n");
   irrecv.enableIRIn();
+#else
+  Serial.println("\n=== Garage Remote ready ===");
+  Serial.println("Press BOOT to open/close garage. Sleeping between presses.\n");
+  gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
+  esp_sleep_enable_gpio_wakeup();
+#endif
 }
 
-bool lastBtn = HIGH;
-
 void loop() {
-  // BOOT button → send garage
-  bool btn = digitalRead(BUTTON_PIN);
-  if (btn == LOW && lastBtn == HIGH) {
-    Serial.println("Sending...");
-    sendGarage();
-    Serial.println("Done.");
-    delay(300);
-  }
-  lastBtn = btn;
-
-  // TSOP receiver → print captured code
+#if CAPTURE_MODE
+  // ── Capture mode: print any received IR code ────────────────────────────────
   if (!irrecv.decode(&results)) return;
 
   Serial.println("─────────────────────────────");
@@ -92,4 +101,17 @@ void loop() {
   }
   Serial.println("─────────────────────────────\n");
   irrecv.resume();
+
+#else
+  // ── Running mode: light sleep until button pressed ──────────────────────────
+  esp_light_sleep_start();   // ~0.8mA while waiting
+
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    Serial.println("Sending...");
+    sendGarage();
+    Serial.println("Done.");
+    while (digitalRead(BUTTON_PIN) == LOW) delay(10);  // wait for release
+    delay(200);                                         // debounce
+  }
+#endif
 }
