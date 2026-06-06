@@ -17,7 +17,8 @@
  *   2N2222 Base   →  100Ω  →  GPIO 3
  *   2N2222 Emitter →  GND
  *
- *   BOOT button   →  GPIO 9 (built-in, active LOW)
+ *   Button leg 1  →  GPIO 6
+ *   Button leg 2  →  GND  (diagonal corner of the 4-pin button)
  */
 
 // ── Set to 1 to capture code, 0 for efficient 24/7 running ───────────────────
@@ -33,7 +34,7 @@
 #include <WiFi.h>   // only to disable it
 
 const uint16_t SEND_PIN   = 3;
-const uint8_t  BUTTON_PIN = 9;
+const uint8_t  BUTTON_PIN = 6;   // external button: one leg → GPIO 6, other leg → GND
 #if CAPTURE_MODE
 const uint16_t RECV_PIN   = 4;
 IRrecv irrecv(RECV_PIN, 1024, 15, true);
