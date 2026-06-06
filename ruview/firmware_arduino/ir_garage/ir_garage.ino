@@ -1,77 +1,79 @@
 /*
- * Garage Door IR Remote — ESP32-C3 Super Mini
+ * Garage Door Remote — ESP32-C3 Super Mini
  *
- * Set CAPTURE_MODE 1 to capture your garage remote code via TSOP.
+ * The LEADER LD-668 uses a rolling/hopping code — IR replay is impossible.
+ * A 2N2222A transistor is wired across the 叫車 button contacts inside the
+ * remote.  A GPIO pulse makes the remote press itself, generating the correct
+ * rolling code from its own firmware.
+ *
+ * Set CAPTURE_MODE 1 only to sniff other IR signals via TSOP (diagnostic).
  * Set CAPTURE_MODE 0 for normal 24/7 use — CPU light-sleeps until button press.
  *
- * Library:  IRremoteESP8266 by crankyoldgit
+ * Library:  IRremoteESP8266 by crankyoldgit  (only needed for CAPTURE_MODE)
  * Board:    ESP32C3 Dev Module  (USB CDC On Boot → Enabled)
  *
- * Wiring:
- *   TSOP1136 OUT  →  GPIO 4    (only active in CAPTURE_MODE)
- *   TSOP1136 GND  →  GND (right pin per your datasheet)
- *   TSOP1136 VCC  →  3.3V
+ * Wiring — transistor across remote button (rolling code approach):
+ *   2N2222A Base      →  1kΩ  →  GPIO 3
+ *   2N2222A Collector →  Remote 叫車 button pad A  (solder thin wire to pad)
+ *   2N2222A Emitter   →  Remote 叫車 button pad B  (solder thin wire to pad)
+ *   Share GND between ESP32 and the remote's battery negative terminal.
  *
- *   IR LED anode  →  47Ω  →  VIN 5V
- *   IR LED cathode →  2N2222 Collector
- *   2N2222 Base   →  100Ω  →  GPIO 3
- *   2N2222 Emitter →  GND
+ * Wiring — TSOP (CAPTURE_MODE only):
+ *   TSOP OUT  →  GPIO 4
+ *   TSOP GND  →  GND (middle pin per datasheet)
+ *   TSOP VCC  →  3.3V
  *
+ * Wiring — trigger button:
  *   Button leg 1  →  GPIO 6
- *   Button leg 2  →  GND  (diagonal corner of the 4-pin button)
+ *   Button leg 2  →  GND  (diagonal corner of 4-pin button)
  */
 
-// ── Set to 1 to capture code, 0 for efficient 24/7 running ───────────────────
-#define CAPTURE_MODE 1
+// ── Set to 1 to sniff IR codes, 0 for efficient 24/7 running ─────────────────
+#define CAPTURE_MODE 0
 
-#include <IRsend.h>
-#include <IRutils.h>
 #include "esp_sleep.h"
 #if CAPTURE_MODE
 #include <IRrecv.h>
+#include <IRutils.h>
 #endif
 
 #include <WiFi.h>   // only to disable it
 
-const uint16_t SEND_PIN   = 3;
-const uint8_t  BUTTON_PIN = 6;   // external button: one leg → GPIO 6, other leg → GND
+const uint8_t REMOTE_PIN = 3;   // controls 2N2222A across remote button pads
+const uint8_t BUTTON_PIN = 6;   // external trigger: one leg → GPIO 6, other → GND
+
 #if CAPTURE_MODE
-const uint16_t RECV_PIN   = 4;
+const uint16_t RECV_PIN = 4;
 IRrecv irrecv(RECV_PIN, 1024, 15, true);
 decode_results results;
 #endif
 
-IRsend irsend(SEND_PIN);
-
-// ── FILL THIS IN after capturing ──────────────────────────────────────────────
+// ── Simulates a physical button press on the LD-668 remote ───────────────────
 void sendGarage() {
-  // Paste your captured line here. Examples:
-  //   irsend.sendNEC(0x20DF10EF, 32);
-  //   irsend.sendSAMSUNG(0xE0E040BF, 32);
-  //   irsend.sendRaw(rawData, sizeof(rawData)/sizeof(rawData[0]), 38);
-  irsend.sendNEC(0x00000000, 32);   // ← replace this
+  digitalWrite(REMOTE_PIN, HIGH);
+  delay(120);                    // hold 120ms — same as a natural press
+  digitalWrite(REMOTE_PIN, LOW);
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 void setup() {
   Serial.begin(115200);
   delay(2000);
 
-  setCpuFrequencyMhz(80);   // halve clock — plenty for IR, saves power
+  setCpuFrequencyMhz(80);   // halve clock — saves power
   WiFi.mode(WIFI_OFF);      // kill radio — saves ~20mA
   btStop();                 // kill BT
 
+  pinMode(REMOTE_PIN, OUTPUT);
+  digitalWrite(REMOTE_PIN, LOW);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  irsend.begin();
 
 #if CAPTURE_MODE
   Serial.println("\n=== CAPTURE MODE ===");
-  Serial.println("Point garage remote at TSOP and press its button.");
-  Serial.println("Copy the >> send line, paste into sendGarage(), set CAPTURE_MODE 0, reflash.\n");
+  Serial.println("Point any remote at TSOP and press its button.");
   irrecv.enableIRIn();
 #else
   Serial.println("\n=== Garage Remote ready ===");
-  Serial.println("Press BOOT to open/close garage. Sleeping between presses.\n");
+  Serial.println("Press button on GPIO 6 to trigger remote. Sleeping between presses.\n");
   gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
   esp_sleep_enable_gpio_wakeup();
 #endif
@@ -108,7 +110,7 @@ void loop() {
   esp_light_sleep_start();   // ~0.8mA while waiting
 
   if (digitalRead(BUTTON_PIN) == LOW) {
-    Serial.println("Sending...");
+    Serial.println("Pressing remote...");
     sendGarage();
     Serial.println("Done.");
     while (digitalRead(BUTTON_PIN) == LOW) delay(10);  // wait for release
