@@ -2,21 +2,24 @@
  * Garage Door Remote — ESP32-C3 Super Mini
  *
  * The LEADER LD-668 uses a rolling/hopping code — IR replay is impossible.
- * A 2N2222A transistor is wired across the 叫車 button contacts inside the
- * remote.  A GPIO pulse makes the remote press itself, generating the correct
- * rolling code from its own firmware.
+ * An SG90 micro servo is taped on top of the remote and physically presses
+ * the 叫車 button from outside.  No disassembly required.
  *
  * Set CAPTURE_MODE 1 only to sniff other IR signals via TSOP (diagnostic).
  * Set CAPTURE_MODE 0 for normal 24/7 use — CPU light-sleeps until button press.
  *
- * Library:  IRremoteESP8266 by crankyoldgit  (only needed for CAPTURE_MODE)
+ * Library:  ESP32Servo  by Kevin Harrington  (install via Library Manager)
+ *           IRremoteESP8266  (only needed for CAPTURE_MODE)
  * Board:    ESP32C3 Dev Module  (USB CDC On Boot → Enabled)
  *
- * Wiring — transistor across remote button (rolling code approach):
- *   2N2222A Base      →  1kΩ  →  GPIO 3
- *   2N2222A Collector →  Remote 叫車 button pad A  (solder thin wire to pad)
- *   2N2222A Emitter   →  Remote 叫車 button pad B  (solder thin wire to pad)
- *   Share GND between ESP32 and the remote's battery negative terminal.
+ * Wiring — SG90 servo:
+ *   Servo red    →  VIN (5V)
+ *   Servo brown  →  GND
+ *   Servo orange →  GPIO 3
+ *
+ *   Mount servo on top of remote with tape/rubber band so the arm tip
+ *   sits just above the 叫車 button at SERVO_REST angle, and presses
+ *   it at SERVO_PRESS angle.  Adjust both values after mounting.
  *
  * Wiring — TSOP (CAPTURE_MODE only):
  *   TSOP OUT  →  GPIO 4
@@ -31,6 +34,11 @@
 // ── Set to 1 to sniff IR codes, 0 for efficient 24/7 running ─────────────────
 #define CAPTURE_MODE 0
 
+// ── Servo angles — adjust to fit your mounting ───────────────────────────────
+#define SERVO_REST   90    // arm lifted clear of button
+#define SERVO_PRESS  45    // arm pushed down onto button
+
+#include <ESP32Servo.h>
 #include "esp_sleep.h"
 #if CAPTURE_MODE
 #include <IRrecv.h>
@@ -39,8 +47,10 @@
 
 #include <WiFi.h>   // only to disable it
 
-const uint8_t REMOTE_PIN = 3;   // controls 2N2222A across remote button pads
+const uint8_t SERVO_PIN  = 3;
 const uint8_t BUTTON_PIN = 6;   // external trigger: one leg → GPIO 6, other → GND
+
+Servo servo;
 
 #if CAPTURE_MODE
 const uint16_t RECV_PIN = 4;
@@ -48,11 +58,12 @@ IRrecv irrecv(RECV_PIN, 1024, 15, true);
 decode_results results;
 #endif
 
-// ── Simulates a physical button press on the LD-668 remote ───────────────────
+// ── Physically presses the remote button via servo ───────────────────────────
 void sendGarage() {
-  digitalWrite(REMOTE_PIN, HIGH);
-  delay(120);                    // hold 120ms — same as a natural press
-  digitalWrite(REMOTE_PIN, LOW);
+  servo.write(SERVO_PRESS);
+  delay(200);                 // hold button for 200ms
+  servo.write(SERVO_REST);
+  delay(300);                 // let arm settle before sleeping
 }
 
 void setup() {
@@ -63,8 +74,10 @@ void setup() {
   WiFi.mode(WIFI_OFF);      // kill radio — saves ~20mA
   btStop();                 // kill BT
 
-  pinMode(REMOTE_PIN, OUTPUT);
-  digitalWrite(REMOTE_PIN, LOW);
+  servo.attach(SERVO_PIN);
+  servo.write(SERVO_REST);
+  delay(500);               // let servo reach rest before sleeping
+
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
 #if CAPTURE_MODE
@@ -73,7 +86,9 @@ void setup() {
   irrecv.enableIRIn();
 #else
   Serial.println("\n=== Garage Remote ready ===");
-  Serial.println("Press button on GPIO 6 to trigger remote. Sleeping between presses.\n");
+  Serial.printf("Servo rest=%d  press=%d  — adjust in sketch if needed.\n",
+    SERVO_REST, SERVO_PRESS);
+  Serial.println("Press button on GPIO 6 to trigger. Sleeping between presses.\n");
   gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
   esp_sleep_enable_gpio_wakeup();
 #endif
