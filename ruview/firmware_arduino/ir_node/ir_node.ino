@@ -30,6 +30,17 @@
 IRsend      irsend(IR_SEND_PIN);
 IRDaikinESP daikin(IR_SEND_PIN);
 
+// Captured raw timings from Panasonic light remote (custom protocol, 38kHz)
+// Both ON and OFF use the same toggle code — one press toggles the light.
+static const uint16_t LIGHT_RAW[] = {
+  5292, 2598, 2132, 770, 2132, 770, 2130, 770, 2132, 2340, 2130, 772,
+  2132, 2340, 2132, 2342, 2130, 776, 2132, 770, 2130, 770, 2130, 770,
+  2132, 770, 2132, 770, 2132, 770, 2130, 770, 2132, 2346, 2132, 2340,
+  2130, 2342, 2132, 2342, 2130, 2342, 2132, 2340, 2132, 2340, 2132,
+  2340, 2132, 772, 2132
+};
+static const uint16_t LIGHT_RAW_LEN = sizeof(LIGHT_RAW) / sizeof(LIGHT_RAW[0]);
+
 // ── MQTT ──────────────────────────────────────────────────────────────────────
 WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
@@ -60,7 +71,7 @@ void applyAC() {
 }
 
 void applyLight(bool on) {
-  irsend.sendPanasonic(0x4004, on ? LIGHT_ON : LIGHT_OFF, 40);
+  irsend.sendRaw(LIGHT_RAW, LIGHT_RAW_LEN, 38);
   mqtt.loop();
   Serial.printf("[Light] %s\n", on ? "ON" : "OFF");
 }
